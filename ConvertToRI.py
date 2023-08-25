@@ -1,38 +1,70 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog, QLabel
 import pandas as pd
+import numpy as np
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog, QLabel, QTextEdit
+from PyQt5.QtCore import pyqtSignal
 
-class App(QWidget):
+class CombinedApp(QWidget):
+
     def __init__(self):
         super().__init__()
-        self.title = 'Excel RT Converter'
+        self.title = 'Excel RT Converter and Column Checker'
         self.initUI()
 
     def initUI(self):
         layout = QVBoxLayout()
+
         self.label = QLabel('No file selected yet', self)
-        
-        browse_button = QPushButton('Browse File', self)
-        browse_button.clicked.connect(self.browse_file)
-        
-        ok_button = QPushButton('OK', self)
-        ok_button.clicked.connect(self.process_file)
+
+        self.browse_button = QPushButton('Browse File', self)
+        self.browse_button.clicked.connect(self.browse_file)
+
+        self.ok_button = QPushButton('OK', self)
+        self.ok_button.clicked.connect(self.process_file)
+
+        self.output_area = QTextEdit(self)
+        self.output_area.setReadOnly(True)
 
         layout.addWidget(self.label)
-        layout.addWidget(browse_button)
-        layout.addWidget(ok_button)
-        
+        layout.addWidget(self.browse_button)
+        layout.addWidget(self.ok_button)
+        layout.addWidget(self.output_area)
+
         self.setLayout(layout)
         self.setWindowTitle(self.title)
         self.show()
 
     def browse_file(self):
         options = QFileDialog.Options()
-        filePath, _ = QFileDialog.getOpenFileName(self, "Open Excel File", "", "Excel Files (*.xlsx *.xlsx);;All Files (*)", options=options)
+        filePath, _ = QFileDialog.getOpenFileName(self, "Open Excel File", "", "Excel Files (*.xlsx *.xls);;All Files (*)", options=options)
         if filePath:
             self.label.setText(filePath)
             self.input_file = filePath
 
+    def check_columns(self):
+        expected_columns = [
+            "Compound", "MF", "RMF", "RT1", "RT2", "Area", "Height", "Quant", "Group", 
+            "Area %", "Signal to Noise", "Major", "Qual"
+        ]
+
+        issues_found = []
+
+        with pd.ExcelFile(self.input_file) as xlsx:
+            for sheet_name in xlsx.sheet_names:
+                if sheet_name not in ['Alkanes', 'PAH']:  # skip Alkanes and PAH
+                    df = pd.read_excel(xlsx, sheet_name)
+                    missing_columns = [col for col in expected_columns if col not in df.columns]
+
+                    if missing_columns:
+                        issues_found.append(f"Sheet '{sheet_name}' is missing columns: {', '.join(missing_columns)}")
+
+        # Display results
+        if not issues_found:
+            return True
+        else:
+            self.output_area.setText("\n".join(issues_found))
+            return False
+        
     def closest_values(self, differences):
         # Get closest positive and closest negative values to 0
         pos_values = [value for value in differences if value >= 0]
@@ -96,17 +128,41 @@ class App(QWidget):
 
 
     def process_file(self):
-        # Read Excel file once and store all sheets in memory
         with pd.ExcelFile(self.input_file) as xlsx:
+            # Check for required sheets
+            if "Alkanes" not in xlsx.sheet_names or "PAH" not in xlsx.sheet_names:
+                self.output_area.setText("Error: The file does not contain both 'Alkanes' and 'PAH' sheets!")
+                return
+
+            if not self.check_columns():
+                return
+
             alkanes_df = pd.read_excel(xlsx, 'Alkanes')
             pah_df = pd.read_excel(xlsx, 'PAH')
-            
+
             sheets_data = {}
             for sheet_name in xlsx.sheet_names:
                 if sheet_name not in ['Alkanes', 'PAH']:
                     sample_df = pd.read_excel(xlsx, sheet_name)
+                    
+                    # Convert to RT indices
                     sample_df["RT1"] = sample_df["RT1"].apply(lambda x: self.convert_rt1(x, alkanes_df))
                     sample_df["RT2"] = sample_df["RT2"].apply(lambda x: self.convert_rt2(x, pah_df))
+                    
+                    # Data cleaning
+                    
+                    # REMOVING SOLVENT
+                    sample_df = sample_df[sample_df['Compound'] != 'Carbon disulfide']
+
+
+                    # REMOVING COLUMN BLEED
+                    sample_df = sample_df[~((sample_df['Major'].between(31.88, 32.12, inclusive='both')) & (sample_df['Qual'].between(43.88, 44.12, inclusive='both')))]
+                    sample_df = sample_df[sample_df['Compound'] != 'Cyclotrisiloxane, hexamethyl-']
+
+                    # REMVING SAMPLES WITH A SIGNAL TO NOISE LESS THAN 5
+                    sample_df = sample_df[sample_df['Signal to Noise'] >= 5]
+
+
                     sheets_data[sheet_name] = sample_df
 
         # Save to a new location
@@ -118,8 +174,8 @@ class App(QWidget):
                     data.to_excel(writer, sheet_name=sheet_name, index=False)
                 writer._save()
 
-
+            self.output_area.setText("Column check passed, RT conversion and data cleaning done successfully!")
 
 app = QApplication(sys.argv)
-ex = App()
+ex = CombinedApp()
 sys.exit(app.exec_())
