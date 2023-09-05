@@ -158,9 +158,15 @@ class CombinedApp(QWidget):
                     # REMOVING COLUMN BLEED
                     sample_df = sample_df[~((sample_df['Major'].between(31.88, 32.12, inclusive='both')) & (sample_df['Qual'].between(43.88, 44.12, inclusive='both')))]
                     sample_df = sample_df[sample_df['Compound'] != 'Cyclotrisiloxane, hexamethyl-']
+                    sample_df = sample_df[~((sample_df['Major'].between(31.88, 32.12, inclusive='both')) & (sample_df['Qual'].between(34.88, 35.12, inclusive='both')))]
+                    sample_df = sample_df[~((sample_df['Major'].between(31.88, 32.12, inclusive='both')) & (sample_df['Qual'].between(75.88, 76.12, inclusive='both')))]
+                    sample_df = sample_df[~((sample_df['Major'].between(31.88, 32.12, inclusive='both')) & (sample_df['Qual'].between(39.88, 40.12, inclusive='both')))]
+                    sample_df = sample_df[~((sample_df['Major'].between(75.88, 76.12, inclusive='both')) & (sample_df['Qual'].between(31.88, 32.12, inclusive='both')))]
+                    sample_df = sample_df[~((sample_df['Major'].between(176.7, 176.8, inclusive='both')) & (sample_df['Qual'].between(177.8, 177.9, inclusive='both')))]
 
-                    # REMVING SAMPLES WITH A SIGNAL TO NOISE LESS THAN 5
-                    sample_df = sample_df[sample_df['Signal to Noise'] >= 5]
+
+                    # REMVING SAMPLES WITH A SIGNAL TO NOISE LESS THAN 10
+                    sample_df = sample_df[sample_df['Signal to Noise'] >= 10]
 
 
                     sheets_data[sheet_name] = sample_df
