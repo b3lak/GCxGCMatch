@@ -1,0 +1,127 @@
+import sys
+import pandas as pd
+import numpy as np
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QFileDialog, QLabel, QMessageBox
+
+class ExcelProcessor(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+        
+    def initUI(self):
+        self.setWindowTitle("Excel Processor")
+        self.setGeometry(200, 200, 400, 300)
+        
+        layout = QVBoxLayout()
+
+        self.label = QLabel('Select an Excel file to start.')
+        layout.addWidget(self.label)
+        
+        self.browse_button = QPushButton('Browse Input File', self)
+        self.browse_button.clicked.connect(self.browse_file)
+        layout.addWidget(self.browse_button)
+        
+        self.ok_button = QPushButton('OK', self)
+        self.ok_button.clicked.connect(self.process_all)
+        layout.addWidget(self.ok_button)
+
+        self.setLayout(layout)
+        
+        self.show()
+
+    def browse_file(self):
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getOpenFileName(self, "Select Excel File", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
+        if file_name:
+            self.input_file_path = file_name
+            self.label.setText(f'Selected: {file_name}')
+  
+    def generate_master_list(self):
+        if not hasattr(self, 'input_file_path'):
+            QMessageBox.warning(self, "Error", "Please select an Excel file first.")
+            return
+        #Print statement for personal viewing
+        print("Generating Master List")
+        excel_file = pd.ExcelFile(self.input_file_path)
+        sheet_names = excel_file.sheet_names
+
+        tolerances = {'RT1': 10, 'RT2': 10, 'Major': 0.12, 'Qual': 0.12}
+        df_all = pd.read_excel(excel_file, sheet_name=sheet_names[0])
+
+        for sheet in sheet_names[1:]:
+            df = pd.read_excel(excel_file, sheet_name=sheet)
+            masks = [not (
+                np.isclose(df_all['RT1'], row['RT1'], atol=tolerances['RT1']) &
+                np.isclose(df_all['RT2'], row['RT2'], atol=tolerances['RT2']) &
+                np.isclose(df_all['Major'], row['Major'], atol=tolerances['Major']) &
+                np.isclose(df_all['Qual'], row['Qual'], atol=tolerances['Qual'])
+            ).any() for _, row in df.iterrows()]
+            df_new = df[masks]
+            df_all = pd.concat([df_all, df_new], ignore_index=True)
+
+        self.df_master = df_all
+
+        print("Master list generated now doing the search")
+
+    def process_file(self):
+        if not hasattr(self, 'df_master'):
+            QMessageBox.warning(self, "Error", "Please generate the master list first.")
+            return
+        print("Beggining the Search")
+        # The logic from the second script for comparison starts here:
+        tolerances = {
+            'RT1': 25,
+            'RT2': 25,
+            'Major': 0.12
+        }
+
+        df_first = self.df_master
+        first_sheet = "Master"
+        xls = pd.ExcelFile(self.input_file_path)
+
+        df_first.columns = [f"{col}_{first_sheet}" for col in df_first.columns]
+
+        result_dfs = {
+            "Area": df_first[["Compound_" + first_sheet, "RT1_" + first_sheet, "RT2_" + first_sheet, "Major_" + first_sheet]].copy()
+        }
+
+        for sheet_name in xls.sheet_names:
+            df = pd.read_excel(xls, sheet_name)
+            df.columns = [f"{col}_{sheet_name}" for col in df.columns]
+
+            for index, row in df_first.iterrows():
+                base_conditions = (
+                    df[f"RT1_{sheet_name}"].between(row[f"RT1_{first_sheet}"] - tolerances['RT1'], row[f"RT1_{first_sheet}"] + tolerances['RT1']) &
+                    df[f"RT2_{sheet_name}"].between(row[f"RT2_{first_sheet}"] - tolerances['RT2'], row[f"RT2_{first_sheet}"] + tolerances['RT2']) &
+                    df[f"Major_{sheet_name}"].between(row[f"Major_{first_sheet}"] - tolerances['Major'], row[f"Major_{first_sheet}"] + tolerances['Major'])
+                )
+
+                # Area
+                matched_row_area = df[base_conditions]["Area_" + sheet_name].values
+                if matched_row_area.any():
+                    result_dfs["Area"].loc[index, f"Area_{sheet_name}"] = matched_row_area[0]
+                else:
+                    result_dfs["Area"].loc[index, f"Area_{sheet_name}"] = None
+                    
+        # Saving the results
+        options = QFileDialog.Options()
+        output_file_name, _ = QFileDialog.getSaveFileName(self, "Save As", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
+        
+        if not output_file_name:
+            return
+
+        with pd.ExcelWriter(output_file_name) as writer:
+            for metric, df in result_dfs.items():
+                df.to_excel(writer, sheet_name=metric, index=False)
+        
+        QMessageBox.information(self, "Done", f"Processed file saved as {output_file_name}")
+        print("Search Complete")
+
+    def process_all(self):
+        self.generate_master_list()
+        self.process_file()
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    ex = ExcelProcessor()
+    sys.exit(app.exec_())
