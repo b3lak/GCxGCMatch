@@ -2,6 +2,7 @@ import sys
 import pandas as pd
 import numpy as np
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QFileDialog, QLabel, QMessageBox
+from scipy.stats import mannwhitneyu
 
 class ExcelProcessor(QWidget):
     def __init__(self):
@@ -102,8 +103,88 @@ class ExcelProcessor(QWidget):
                     result_dfs["Area"].loc[index, f"Area_{sheet_name}"] = matched_row_area[0]
                 else:
                     result_dfs["Area"].loc[index, f"Area_{sheet_name}"] = None
-                    
+        
         # Saving the results
+        df_output = result_dfs["Area"]
+        
+        #VARIENCE CHECKING
+        print("Search complete. Beggining Varience Check")
+        print("First four column names:", df_output.columns[:4].tolist())
+
+        # Fill NaN values in 'Compound_Results' with 'Compound_index+1'
+        df_output['Compound_Master'] = df_output['Compound_Master'].combine_first(df_output.index.to_series().add(1).astype(str).radd('Compound_'))
+
+        # Calculate variance for each sample for each compound
+        all_vars, all_means, all_stds = [], [], []
+
+        for i in range(1, 34):
+            var_col_name = f"Variance_S{i}"
+            mean_col_name = f"Mean_S{i}"
+            std_dev_col_name = f"StdDev_S{i}"
+            
+            current_var = df_output[[f"Area_S{i}-1", f"Area_S{i}-2", f"Area_S{i}-3"]].var(axis=1).rename(var_col_name)
+            current_mean = df_output[[f"Area_S{i}-1", f"Area_S{i}-2", f"Area_S{i}-3"]].mean(axis=1).rename(mean_col_name)
+            current_std = df_output[[f"Area_S{i}-1", f"Area_S{i}-2", f"Area_S{i}-3"]].std(axis=1).rename(std_dev_col_name)
+            
+            all_vars.append(current_var)
+            all_means.append(current_mean)
+            all_stds.append(current_std)
+
+        # Concatenate all new columns at once
+        additional_cols = pd.concat([*all_vars, *all_means, *all_stds], axis=1)
+        df_output = pd.concat([df_output, additional_cols], axis=1)
+
+        # Aggregate variance using mean across all samples for each compound
+        df_output['Avg_Variance'] = df_output[[f"Variance_S{i}" for i in range(1, 34)]].mean(axis=1)
+
+        # Determine a threshold for aggregated variance
+        threshold = df_output['Avg_Variance'].quantile(0.90)
+
+        # Filter out compounds with average variance above the threshold
+        high_variance_compounds = df_output[df_output['Avg_Variance'] > threshold]
+
+        # Print the number and details of compounds that will be removed
+        print("Number of compounds with high variance:", len(high_variance_compounds))
+        print("Details of compounds to be removed:")
+        print(high_variance_compounds[['Compound_Master', 'Avg_Variance']])
+
+        df_output = df_output[df_output['Avg_Variance'] <= threshold]
+
+        # Starting Mann-Whitney U test
+
+        significant_count = 0
+
+        # Loop through each station
+        for i in range(1, 34):
+            
+            # Track significant tests per station
+            station_significance_count = 0
+            
+            # Loop through each compound
+            for _, row in df_output.iterrows():
+                # Extract replicate values for current station and compound
+                replicates_1_2 = [row[f"Area_S{i}-1"], row[f"Area_S{i}-2"]]  # Values from first two replicates
+                replicate_3 = row[f"Area_S{i}-3"]  # Value from third replicate
+                
+                # Removing NaN values from replicates_1_2
+                replicates_1_2 = [x for x in replicates_1_2 if not pd.isna(x)]
+                
+                # Only perform test if there's non-NaN data for comparison
+                if len(replicates_1_2) > 0 and not pd.isna(replicate_3):
+                    _, p_val = mannwhitneyu(replicates_1_2, [replicate_3], alternative='two-sided')  # Two-sided test to check for differences
+                    
+                    # Check if the test is significant at 0.05 level
+                    if p_val < 0.05:
+                        station_significance_count += 1
+            
+            print(f"Station S{i} has {station_significance_count} compounds where third replicate is significantly different.")
+            significant_count += station_significance_count
+
+        print(f"Overall, there are {significant_count} instances where the third replicate is significantly different across all stations.")
+
+        # Saving the results (and so on)
+
+
         options = QFileDialog.Options()
         output_file_name, _ = QFileDialog.getSaveFileName(self, "Save As", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
         
@@ -111,11 +192,10 @@ class ExcelProcessor(QWidget):
             return
 
         with pd.ExcelWriter(output_file_name) as writer:
-            for metric, df in result_dfs.items():
-                df.to_excel(writer, sheet_name=metric, index=False)
-        
+            df_output.to_excel(writer, sheet_name="Area", index=False)
+            
         QMessageBox.information(self, "Done", f"Processed file saved as {output_file_name}")
-        print("Search Complete")
+
 
     def process_all(self):
         self.generate_master_list()
