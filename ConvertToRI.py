@@ -41,6 +41,27 @@ class CombinedApp(QWidget):
             self.label.setText(filePath)
             self.input_file = filePath
 
+    def rename_columns(self):
+        # Determine the new file name for the renamed columns
+        output_file_path = self.input_file.replace('.xlsx', '_fixednames.xlsx')
+
+        with pd.ExcelFile(self.input_file) as xlsx:
+            with pd.ExcelWriter(output_file_path) as writer:  # Write to the new file
+                for sheet_name in xlsx.sheet_names:
+                    df = pd.read_excel(xlsx, sheet_name=sheet_name)
+
+                    # Only rename columns if it's not the 'Alkanes' or 'PAH' sheet
+                    if sheet_name not in ['Alkanes', 'PAH']:  
+                        df.rename(columns={'<sup>1</sup>t<sub>R</sub>': 'RT1', '<sup>2</sup>t<sub>R</sub>': 'RT2'}, inplace=True)
+
+                    # Always write the dataframe to the new file, whether columns were renamed or not
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+        print("File Column Names Fixed")
+        # Update the input file attribute to point to the newly created file
+        self.input_file = output_file_path
+
+
     def check_columns(self):
         expected_columns = [
             "Compound", "MF", "RMF", "RT1", "RT2", "Area", "Height", "Quant", "Group", 
@@ -58,6 +79,7 @@ class CombinedApp(QWidget):
                     if missing_columns:
                         issues_found.append(f"Sheet '{sheet_name}' is missing columns: {', '.join(missing_columns)}")
 
+        print("Column Names Checked")
         # Display results
         if not issues_found:
             return True
@@ -128,6 +150,8 @@ class CombinedApp(QWidget):
 
 
     def process_file(self):
+        # Rename columns first
+        self.rename_columns()
         with pd.ExcelFile(self.input_file) as xlsx:
             # Check for required sheets
             if "Alkanes" not in xlsx.sheet_names or "PAH" not in xlsx.sheet_names:
