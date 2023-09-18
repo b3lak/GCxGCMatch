@@ -97,13 +97,16 @@ class ExcelProcessor(QWidget):
                     df[f"Major_{sheet_name}"].between(row[f"Major_{first_sheet}"] - tolerances['Major'], row[f"Major_{first_sheet}"] + tolerances['Major'])
                 )
 
-                # Area
+                # Area and Area%
                 matched_row_area = df[base_conditions]["Area_" + sheet_name].values
+                matched_row_area_pct = df[base_conditions]["Area %" + "_" + sheet_name].values
                 if matched_row_area.any():
                     result_dfs["Area"].loc[index, f"Area_{sheet_name}"] = matched_row_area[0]
+                    result_dfs["Area"].loc[index, f"Area %_{sheet_name}"] = matched_row_area_pct[0] if matched_row_area_pct.any() else None
                 else:
                     result_dfs["Area"].loc[index, f"Area_{sheet_name}"] = None
-        
+                    result_dfs["Area"].loc[index, f"Area %_{sheet_name}"] = None
+
         # Saving the results
         df_output = result_dfs["Area"]
         
@@ -194,23 +197,30 @@ class ExcelProcessor(QWidget):
 
         with pd.ExcelWriter(output_file_name) as writer:
             # Drop additional columns before saving
-            cleaned_df_output = self.drop_additional_columns(df_output)
-            cleaned_high_variance_compounds = self.drop_additional_columns(high_variance_compounds)
+            cleaned_df_output = self.drop_additional_columns(df_output, sheet_name="Area")
+            cleaned_high_variance_compounds = self.drop_additional_columns(high_variance_compounds, sheet_name="High Variance Compounds")
 
             cleaned_df_output.to_excel(writer, sheet_name="Area", index=False)
             cleaned_high_variance_compounds.to_excel(writer, sheet_name="High Variance Compounds", index=False)  # Save the high variance compounds to a new sheet
  
         QMessageBox.information(self, "Done", f"Processed file saved as {output_file_name}")
 
-    def drop_additional_columns(self, df):
+    def drop_additional_columns(self, df, sheet_name=None):
         # List of column name patterns to drop
         cols_to_drop_patterns = ["Variance_S", "Mean_S", "StdDev_S", "Avg_Variance"]
-        
+
+        # For sheet 'Area', drop columns that match "Area %_S" pattern
+        if sheet_name == 'Area':
+            drop_area_percent_pattern = "Area %_S"
+            cols_to_drop = [col for col in df.columns if drop_area_percent_pattern in col]
+            df = df.drop(columns=cols_to_drop)
+
         # Determine columns that match the patterns and drop them
         for pattern in cols_to_drop_patterns:
             cols_to_drop = [col for col in df.columns if pattern in col]
             df = df.drop(columns=cols_to_drop)
         return df
+
 
     def process_all(self):
         self.generate_master_list()
