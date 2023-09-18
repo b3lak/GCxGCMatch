@@ -109,7 +109,7 @@ class ExcelProcessor(QWidget):
         
         #VARIENCE CHECKING
         print("Search complete. Beggining Varience Check")
-        print("First four column names:", df_output.columns[:4].tolist())
+        #print("First four column names:", df_output.columns[:4].tolist())
 
         # Fill NaN values in 'Compound_Results' with 'Compound_index+1'
         df_output['Compound_Master'] = df_output['Compound_Master'].combine_first(df_output.index.to_series().add(1).astype(str).radd('Compound_'))
@@ -137,17 +137,20 @@ class ExcelProcessor(QWidget):
         # Aggregate variance using mean across all samples for each compound
         df_output['Avg_Variance'] = df_output[[f"Variance_S{i}" for i in range(1, 34)]].mean(axis=1)
 
-        # Determine a threshold for aggregated variance
-        threshold = df_output['Avg_Variance'].quantile(0.90)
+        # Set the threshold for aggregated variance
+        threshold = 1e+13
 
         # Filter out compounds with average variance above the threshold
         high_variance_compounds = df_output[df_output['Avg_Variance'] > threshold]
 
         # Print the number and details of compounds that will be removed
         print("Number of compounds with high variance:", len(high_variance_compounds))
-        print("Details of compounds to be removed:")
-        print(high_variance_compounds[['Compound_Master', 'Avg_Variance']])
 
+        # can be un tabbed if you want the removed high variance compounds to be displayed
+        #print("Details of compounds to be removed:")
+        #print(high_variance_compounds[['Compound_Master', 'Avg_Variance']])
+
+        # Remove the compounds with high variance from df_output
         df_output = df_output[df_output['Avg_Variance'] <= threshold]
 
         # Starting Mann-Whitney U test
@@ -176,15 +179,13 @@ class ExcelProcessor(QWidget):
                     # Check if the test is significant at 0.05 level
                     if p_val < 0.05:
                         station_significance_count += 1
-            
-            print(f"Station S{i} has {station_significance_count} compounds where third replicate is significantly different.")
+            # can be untabbed, just shows the compounds where third replicate is significantly different
+            #print(f"Station S{i} has {station_significance_count} compounds where third replicate is significantly different.")
             significant_count += station_significance_count
 
         print(f"Overall, there are {significant_count} instances where the third replicate is significantly different across all stations.")
 
-        # Saving the results (and so on)
-
-
+        # Saving the results 
         options = QFileDialog.Options()
         output_file_name, _ = QFileDialog.getSaveFileName(self, "Save As", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
         
@@ -192,10 +193,24 @@ class ExcelProcessor(QWidget):
             return
 
         with pd.ExcelWriter(output_file_name) as writer:
-            df_output.to_excel(writer, sheet_name="Area", index=False)
-            
+            # Drop additional columns before saving
+            cleaned_df_output = self.drop_additional_columns(df_output)
+            cleaned_high_variance_compounds = self.drop_additional_columns(high_variance_compounds)
+
+            cleaned_df_output.to_excel(writer, sheet_name="Area", index=False)
+            cleaned_high_variance_compounds.to_excel(writer, sheet_name="High Variance Compounds", index=False)  # Save the high variance compounds to a new sheet
+ 
         QMessageBox.information(self, "Done", f"Processed file saved as {output_file_name}")
 
+    def drop_additional_columns(self, df):
+        # List of column name patterns to drop
+        cols_to_drop_patterns = ["Variance_S", "Mean_S", "StdDev_S", "Avg_Variance"]
+        
+        # Determine columns that match the patterns and drop them
+        for pattern in cols_to_drop_patterns:
+            cols_to_drop = [col for col in df.columns if pattern in col]
+            df = df.drop(columns=cols_to_drop)
+        return df
 
     def process_all(self):
         self.generate_master_list()
