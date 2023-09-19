@@ -9,51 +9,47 @@ from sklearn.preprocessing import LabelEncoder
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.colors as mcolors
 
-
-
 brand_encoder = LabelEncoder()
 
-
 base_path = "/Users/caleb/Desktop/ILRStationAnalysis/"
-
 # Paths and metadata for your Excel files
 files_details = [
-    ('S1R.xlsx', 1, 'Parkdale Gas Co-op'),
-    ('S2R.xlsx', 2, 'Esso'),
-    ('S3R.xlsx', 3, 'Centex'),
-    ('S4R.xlsx', 4, 'Petro Canada'),
-    ('S6R.xlsx', 6, 'Shell'),
-    ('S7R.xlsx', 7, 'Esso'),
-    ('S9R.xlsx', 9, 'Canpro'),
-    ('S10R.xlsx', 10, '7eleven'),
-    ('S11R.xlsx', 11, 'Co-op'),
-    ('S12R.xlsx', 12, 'Husky'),
-    ('S13R.xlsx', 13, 'Chevron'),
-    ('S14R.xlsx', 14, 'Canadian Tire Gas+'),
-    ('S15R.xlsx', 15, 'Mobil'),
-    ('S16R.xlsx', 16, 'Fair Deal Gas Bar'),
-    ('S17R.xlsx', 17, 'Co-op'),
-    ('S18R.xlsx', 18, 'Domo'),
-    ('S20R.xlsx', 20, 'Gas Plus'),
-    ('S21R.xlsx', 21, '7eleven'),
-    ('S22R.xlsx', 22, 'Petro Canada'),
-    ('S23R.xlsx', 23, 'Safeway Gas'),
-    ('S24R.xlsx', 24, 'Canadian Tire Gas+'),
-    ('S25R.xlsx', 25, 'G&B Fuels'),
-    ('S26R.xlsx', 26, 'Costco'),
-    ('S27R.xlsx', 27, 'Tsuu Tina Gas Stop'),
-    ('S28R.xlsx', 28, 'Shell'),
-    ('S29R.xlsx', 29, 'Chevron'),
-    ('S30R.xlsx', 30, 'Safeway Gas'),
-    ('S31R.xlsx', 31, 'Husky'),
-    ('S32R.xlsx', 32, 'G&B Fuels'),
-    ('S33R.xlsx', 33, 'Mobil')
+    ('S1V.xlsx', 1, 'Parkdale Gas Co-op'),
+    ('S2V.xlsx', 2, 'Esso'),
+    ('S3V.xlsx', 3, 'Centex'),
+    ('S4V.xlsx', 4, 'Petro Canada'),
+    ('S6V.xlsx', 6, 'Shell'),
+    ('S7V.xlsx', 7, 'Esso'),
+    ('S9V.xlsx', 9, 'Canpro'),
+    ('S10V.xlsx', 10, '7eleven'),
+    ('S11V.xlsx', 11, 'Co-op'),
+    ('S12V.xlsx', 12, 'Husky'),
+    ('S13V.xlsx', 13, 'Chevron'),
+    ('S14V.xlsx', 14, 'Canadian Tire Gas+'),
+    ('S15V.xlsx', 15, 'Mobil'),
+    ('S16V.xlsx', 16, 'Fair Deal Gas Bar'),
+    ('S17V.xlsx', 17, 'Co-op'),
+    ('S18V.xlsx', 18, 'Domo'),
+    ('S20V.xlsx', 20, 'Gas Plus'),
+    ('S21V.xlsx', 21, '7eleven'),
+    ('S22V.xlsx', 22, 'Petro Canada'),
+    ('S23V.xlsx', 23, 'Safeway Gas'),
+    ('S24V.xlsx', 24, 'Canadian Tire Gas+'),
+    ('S25V.xlsx', 25, 'G&B Fuels'),
+    ('S26V.xlsx', 26, 'Costco'),
+    ('S27V.xlsx', 27, 'Tsuu Tina Gas Stop'),
+    ('S28V.xlsx', 28, 'Shell'),
+    ('S29V.xlsx', 29, 'Chevron'),
+    ('S30V.xlsx', 30, 'Safeway Gas'),
+    ('S31V.xlsx', 31, 'Husky'),
+    ('S32V.xlsx', 32, 'G&B Fuels'),
+    ('S33V.xlsx', 33, 'Mobil')
 ]
 
 unknown_files = [
-    "/Users/caleb/Desktop/ILRStationAnalysis/S5R.xlsx",
-    "/Users/caleb/Desktop/ILRStationAnalysis/S8R.xlsx",
-    "/Users/caleb/Desktop/ILRStationAnalysis/S19R.xlsx"
+    "/Users/caleb/Desktop/ILRStationAnalysis/S5V.xlsx",
+    "/Users/caleb/Desktop/ILRStationAnalysis/S8V.xlsx",
+    "/Users/caleb/Desktop/ILRStationAnalysis/S19V.xlsx"
 ]
 
 def sanitize_compound_name(name, idx):
@@ -85,8 +81,6 @@ def unsanitize_compound_name(name):
 
     return name
 
-
-
 def organize_dataframe(is_unknown=False, unknown_files=None, normalization_type='log10'):
     all_data = []
     
@@ -113,8 +107,9 @@ def organize_dataframe(is_unknown=False, unknown_files=None, normalization_type=
             signals = pd.read_excel(base_path + file_name, sheet_name="SignalToNoise")
             area_percs = pd.read_excel(base_path + file_name, sheet_name="Area%")
 
+        #, 'Benzene', 'Toluene', 'Ethylbenzene', 'p-Xylene']
         # Removing rows with Carbon disulfide
-        unwanted_compounds = ['Carbon disulfide', 'Benzene', 'Toluene', 'Ethylbenzene', 'p-Xylene', 'Cyclotrisiloxane, hexamethyl-']
+        unwanted_compounds = ['Carbon disulfide', 'Cyclotrisiloxane, hexamethyl-']
         for compound in unwanted_compounds:
             areas = areas[areas['Compound_Results'] != compound]
             heights = heights[heights['Compound_Results'] != compound]
@@ -147,18 +142,16 @@ def organize_dataframe(is_unknown=False, unknown_files=None, normalization_type=
             signal_col = col.replace("Area", "Signal to Noise")
             area_perc_col = col.replace("Area", "Area %")
 
+            #HERE IS THE FEATURES WE ARE USING FOR THE MODEL
             for idx, compound in enumerate(compounds):
                 sample_data[f"{compound}_Area"] = area_values[idx]
-                sample_data[f"{compound}_Binary"] = 1 if area_values[idx] > 0 else 0
-
-                # Add the new features and apply log10 normalization if it's not a binary column
-                sample_data[f"{compound}_Height"] = normalize_data(heights[height_col].iloc[idx], normalization_type)
+                #sample_data[f"{compound}_Binary"] = 1 if area_values[idx] > 0 else 0
+                #sample_data[f"{compound}_Height"] = normalize_data(heights[height_col].iloc[idx], normalization_type)
 
 
             all_data.append(sample_data)
 
     return pd.DataFrame(all_data)
-
 
 def percent_normalize(data):
     """Perform a min-max normalization scaled to 0-100%"""
@@ -257,7 +250,6 @@ def visualize_pca_3d(pca_results, labels, title='PCA of Station Data', emphasize
     plt.tight_layout()
     plt.show()
 
-
 def encode_brands(df):
     """
     Encode 'Brand' column to numerical values.
@@ -278,7 +270,7 @@ def decode_brands(df):
 
     return df
 
-def print_top_features_for_each_pc(pca, feature_names, n=1000):
+def print_top_features_for_each_pc(pca, feature_names, n=10):
     """
     Print the top features for each principal component.
     
@@ -300,21 +292,44 @@ def print_top_features_for_each_pc(pca, feature_names, n=1000):
             print(f"{i}. {unsanitized_feature} ({component[sorted_feature_idx[i-1]]:.4f})")
     
         print('-'*50)
+
+# def print_nan_locations(df):
+#     nan_loc = df.isna().stack()  # This will create a multi-index series with boolean values
+#     nan_loc = nan_loc[nan_loc]  # Filter out the non-NaN locations
+#     print(f"NaNs found in the following locations:\n{nan_loc}")
         
-
-
 def main():
     # Set up PCA
     pca = PCA(n_components=3)
 
     # Organize the processed dataframe
-    df_processed = organize_dataframe(normalization_type='nonorm')
+    df_processed = organize_dataframe(normalization_type='percent')
     df_processed = encode_brands(df_processed)
-    df_processed.fillna(0, inplace=True)
+    # For df_processed
+    area_cols = [col for col in df_processed.columns if col.startswith('Area_') or col.endswith('_Area')]
+    height_cols = [col for col in df_processed.columns if col.startswith('Height_') or col.endswith('_Height')]
+
+    df_processed[area_cols] = df_processed[area_cols].fillna(107668)
+    df_processed[height_cols] = df_processed[height_cols].fillna(20004)
+    #df_processed.fillna(0, inplace=True)
+
+    #DEBUG
+    #print("Checking NaNs in df_processed:")
+    #print_nan_locations(df_processed)
 
     # Organize the unknown dataframe
-    df_unknown = organize_dataframe(is_unknown=True, unknown_files=unknown_files, normalization_type='nonorm')
-    df_unknown.fillna(0, inplace=True)
+    df_unknown = organize_dataframe(is_unknown=True, unknown_files=unknown_files, normalization_type='percent')
+    # For df_unknown
+    area_cols_unknown = [col for col in df_unknown.columns if col.startswith('Area_') or col.endswith('_Area')]
+    height_cols_unknown = [col for col in df_unknown.columns if col.startswith('Height_') or col.endswith('_Height')]
+
+    df_unknown[area_cols_unknown] = df_unknown[area_cols_unknown].fillna(107668)
+    df_unknown[height_cols_unknown] = df_unknown[height_cols_unknown].fillna(20004)
+    #df_unknown.fillna(0, inplace=True)
+
+    #dDEBUG
+    #print("\nChecking NaNs in df_unknown:")
+    #print_nan_locations(df_unknown)
 
     # Drop Brand and Station_Rating columns
     features_processed = df_processed.drop(columns=['Brand', 'Station_Rating']).values
